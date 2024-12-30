@@ -1,0 +1,54 @@
+name: Create release
+
+on:
+  workflow_dispatch:
+    inputs:
+      download_links:
+        description: 'Comma-separated list of file download links'
+        required: true
+        type: string
+
+jobs:
+  download-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Download Files
+        run: |
+          IFS=',' read -ra LINKS <<< "${{ inputs.download_links }}"
+          for link in "${LINKS[@]}"; do
+            echo "Downloading $link"
+            curl -LO "$link"
+          done
+        shell: bash
+
+      - name: Create GitHub Release
+        id: create_release
+        run: |
+          TAG_NAME="v1.0.${{ github.run_number }}"
+          echo "Creating release with tag $TAG_NAME"
+          RELEASE=$(gh release create "$TAG_NAME" --title "Release $TAG_NAME" --notes "Automated release" --target "${{ github.sha }}")
+          echo "Release created: $RELEASE"
+          echo "TAG_NAME=$TAG_NAME" >> $GITHUB_ENV
+          echo "RELEASE_ID=$RELEASE" >> $GITHUB_ENV
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Files to Release
+        run: |
+          echo "Using Release Tag: $TAG_NAME"
+          echo "Release ID: $RELEASE_ID"
+          echo "Files to Upload:"
+          ls -lh
+
+          for file in *; do
+            if [ -f "$file" ]; then
+              echo "Uploading $file"
+              gh release upload "$TAG_NAME" "$file"
+            fi
+          done
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
